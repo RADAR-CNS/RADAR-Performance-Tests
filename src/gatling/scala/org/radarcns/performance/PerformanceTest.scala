@@ -17,6 +17,7 @@
 package org.radarcns.performance
 
 import java.io.{ByteArrayOutputStream, StringWriter}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -44,47 +45,44 @@ class PerformanceTest extends Simulation {
   private val restProxyUrl = conf.getString("restProxy")
   private val numberOfParticipants = conf.getInt("numberOfParticipants")
   private val durationMs = conf.getDuration("duration", TimeUnit.MILLISECONDS)
-  private val paceMs = conf.getDuration("pace", TimeUnit.MILLISECONDS)
   private val userId = if (conf.hasPath("userId")) conf.getString("userId") else ""
 
   private var keySchemaId = 0
   private val schemaIds = new ConcurrentHashMap[String, Int]()
 
   private val topics = csv("topics.csv")
+  private val schemasRegistered = new AtomicBoolean()
 
-  private val registerKeySchema: ScenarioBuilder = scenario("RegisterKeySchema")
-    .exec(http("RegisterKeySchema")
-      .post(schemaRegistryUrl + "/subjects/key/versions")
-      .header("Content-Type", "application/vnd.schemaregistry.v1+json")
-      .body(StringBody(schemaWrapper(classOf[MeasurementKey])))
-      .check(jsonPath("$..id").ofType[Int].saveAs("key"))
-    )
-    .exec(session => {
-      keySchemaId = session("key").as[Int]
-      session
-    })
-
-
-  private val registerValueSchemas: ScenarioBuilder = scenario("RegisterValueSchemas")
-    .repeat(topics.records.size) {
-      feed(topics.queue)
-        .exec(http("RegisterValueSchemas")
-          .post(schemaRegistryUrl + "/subjects/${topic}-value/versions")
-          .header("Content-Type", "application/vnd.schemaregistry.v1+json")
-          .body(StringBody(valueSchema))
-          .check(jsonPath("$..id").ofType[Int].saveAs("schemaId"))
-        )
+  private val performanceTest: ScenarioBuilder = scenario("PerformanceTest")
+    .doIf(_ => schemasRegistered.compareAndSet(false, true)) {
+      exec(http("RegisterKeySchema")
+        .post(schemaRegistryUrl + "/subjects/key/versions")
+        .header("Content-Type", "application/vnd.schemaregistry.v1+json")
+        .body(StringBody(schemaWrapper(classOf[MeasurementKey])))
+        .check(jsonPath("$..id").ofType[Int].saveAs("key"))
+      )
         .exec(session => {
-          schemaIds.put(session("topic").as[String], session("schemaId").as[Int])
+          keySchemaId = session("key").as[Int]
           session
         })
+        .repeat(topics.records.size) {
+          feed(topics.queue)
+            .exec(http("RegisterValueSchemas")
+              .post(schemaRegistryUrl + "/subjects/${topic}-value/versions")
+              .header("Content-Type", "application/vnd.schemaregistry.v1+json")
+              .body(StringBody(valueSchema))
+              .check(jsonPath("$..id").ofType[Int].saveAs("schemaId"))
+            )
+            .exec(session => {
+              schemaIds.put(session("topic").as[String], session("schemaId").as[Int])
+              session
+            })
+        }
     }
-
-  private val sendData: ScenarioBuilder = scenario("PerformanceTest")
-    .pause(_ => random.nextInt(paceMs.toInt) milliseconds)
+    .feed(topics.random)
+    .pause(session => random.nextInt((session("frequency").as[String].toDouble * 1000).toInt) milliseconds)
     .during(durationMs milliseconds) {
-      pace(paceMs milliseconds)
-        .feed(topics.random)
+      pace(session => session("frequency").as[String].toDouble * 1000 milliseconds)
         .exec(http("Performance Test")
           .post(restProxyUrl + "/topics/${topic}")
           .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
@@ -93,9 +91,11 @@ class PerformanceTest extends Simulation {
     }
 
   setUp(
-    registerKeySchema.inject(atOnceUsers(1)),
-    registerValueSchemas.inject(atOnceUsers(1)),
-    sendData.inject(atOnceUsers(numberOfParticipants))
+    performanceTest.inject(
+      atOnceUsers(1),
+      nothingFor(10 seconds),
+      atOnceUsers(numberOfParticipants * topics.records.size)
+    )
   ).protocols(http)
 
   private def valueSchema(session: Session): String = {
