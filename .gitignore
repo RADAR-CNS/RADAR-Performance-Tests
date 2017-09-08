@@ -1,0 +1,26 @@
+# Intellij
+.idea/
+*.iml
+*.iws
+classes/
+
+# Mac
+.DS_Store
+
+# Maven
+log/
+
+# Gradle
+.gradle/
+.gradletasknamecache
+
+# Build
+/build/
+
+# logs
+backend.log
+
+# Configuration
+smtp.env
+
+/out/

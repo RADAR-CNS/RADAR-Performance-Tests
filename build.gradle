@@ -1,0 +1,39 @@
+plugins {
+    id "com.github.lkishalmi.gatling" version "0.4.1"
+    id "idea"
+}
+
+group 'org.radarcnd'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    jcenter()
+
+    flatDir { dirs 'libs' }
+}
+
+ext.avroVersion = '1.8.1'
+
+
+dependencies {
+    gatling group: 'org.apache.avro', name: 'avro-tools', version: avroVersion
+    gatling name: 'schemas-1.0'
+}
+
+gatling {
+    simulations = {
+        include "**/org/radarcns/performance/*.scala"
+    }
+}
+
+idea {
+    module {
+        downloadSources = true
+
+        testSourceDirs += project.file('src/gatling/scala')
+        scopes.TEST.plus += [project.configurations.gatlingCompile]
+        scopes.TEST.plus += [project.configurations.gatlingRuntime]
+    }
+}
