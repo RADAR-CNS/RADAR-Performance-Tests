@@ -54,7 +54,7 @@ class PerformanceTest extends Simulation {
   private val schemasRegistered = new AtomicBoolean()
 
   private val performanceTest: ScenarioBuilder = scenario("PerformanceTest")
-    .doIf(_ => schemasRegistered.compareAndSet(false, true)) {
+    .doIfOrElse(_ => schemasRegistered.compareAndSet(false, true)) {
       exec(http("RegisterKeySchema")
         .post(schemaRegistryUrl + "/subjects/key/versions")
         .header("Content-Type", "application/vnd.schemaregistry.v1+json")
@@ -78,16 +78,17 @@ class PerformanceTest extends Simulation {
               session
             })
         }
-    }
-    .feed(topics.random)
-    .pause(session => random.nextInt((session("frequency").as[String].toDouble * 1000).toInt) milliseconds)
-    .during(durationMs milliseconds) {
-      pace(session => session("frequency").as[String].toDouble * 1000 milliseconds)
-        .exec(http("Performance Test")
-          .post(restProxyUrl + "/topics/${topic}")
-          .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
-          .header("X-User-ID", userId)
-          .body(StringBody(requestBody)))
+    } {
+      feed(topics.random)
+        .pause(session => random.nextInt((session("frequency").as[String].toDouble * 1000).toInt) milliseconds)
+        .during(durationMs milliseconds) {
+          pace(session => session("frequency").as[String].toDouble * 1000 milliseconds)
+            .exec(http("Performance Test")
+              .post(restProxyUrl + "/topics/${topic}")
+              .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
+              .header("X-User-ID", userId)
+              .body(StringBody(requestBody)))
+        }
     }
 
   setUp(
