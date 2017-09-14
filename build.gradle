@@ -14,7 +14,7 @@ repositories {
     flatDir { dirs 'libs' }
 }
 
-ext.avroVersion = '1.8.1'
+ext.avroVersion = '1.8.2'
 
 
 dependencies {
