@@ -1,4 +1,4 @@
-topic,valueClass,recordCount,frequency
+topic,valueClass,recordCount,interval
 application_server_status,org.radarcns.application.ApplicationServerStatus,1,300
 application_record_counts,org.radarcns.application.ApplicationRecordCounts,1,300
 application_uptime,org.radarcns.application.ApplicationUptime,1,300

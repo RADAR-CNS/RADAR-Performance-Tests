@@ -44,14 +44,26 @@ class PerformanceTest extends Simulation {
   private val schemaRegistryUrl = conf.getString("schemaRegistry")
   private val restProxyUrl = conf.getString("restProxy")
   private val numberOfParticipants = conf.getInt("numberOfParticipants")
-  private val durationMs = conf.getDuration("duration", TimeUnit.MILLISECONDS)
-  private val userId = if (conf.hasPath("userId")) conf.getString("userId") else ""
+  private val duration = conf.getDuration("duration", TimeUnit.SECONDS) seconds
 
   private var keySchemaId = 0
   private val schemaIds = new ConcurrentHashMap[String, Int]()
 
   private val topics = csv("topics.csv")
   private val schemasRegistered = new AtomicBoolean()
+  val userIdFeeder = new Feeder[String] {
+    override def hasNext = true
+
+    override def next: Map[String, String] = Map("user" -> random.nextInt(numberOfParticipants).toString)
+  }
+
+  val phaseFeeder = new Feeder[Double] {
+    override def hasNext = true
+
+    override def next: Map[String, Double] = {
+      Map("phase" -> random.nextDouble())
+    }
+  }
 
   private val performanceTest: ScenarioBuilder = scenario("PerformanceTest")
     .doIfOrElse(_ => schemasRegistered.compareAndSet(false, true)) {
@@ -59,8 +71,7 @@ class PerformanceTest extends Simulation {
         .post(schemaRegistryUrl + "/subjects/key/versions")
         .header("Content-Type", "application/vnd.schemaregistry.v1+json")
         .body(StringBody(schemaWrapper(classOf[MeasurementKey])))
-        .check(jsonPath("$..id").ofType[Int].saveAs("key"))
-      )
+        .check(jsonPath("$..id").ofType[Int].saveAs("key")))
         .exec(session => {
           keySchemaId = session("key").as[Int]
           session
@@ -79,22 +90,31 @@ class PerformanceTest extends Simulation {
             })
         }
     } {
-      feed(topics.random)
-        .pause(session => random.nextInt((session("frequency").as[String].toDouble * 1000).toInt) milliseconds)
-        .during(durationMs milliseconds) {
-          pace(session => session("frequency").as[String].toDouble * 1000 milliseconds)
+      feed(userIdFeeder)
+        .feed(phaseFeeder)
+        .feed(topics.random)
+        .doIf(initialDelay(_) < duration) {
+          pause(initialDelay(_))
             .exec(http("Performance Test")
               .post(restProxyUrl + "/topics/${topic}")
               .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
-              .header("X-User-ID", userId)
+              .header("X-User-ID", _ ("user").as[String])
               .body(StringBody(requestBody)))
+            .repeat(session => ((duration - initialDelay(session)) / interval(session)).toInt) {
+              pause(interval(_))
+                .exec(http("Performance Test")
+                  .post(restProxyUrl + "/topics/${topic}")
+                  .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
+                  .header("X-User-ID", _ ("user").as[String])
+                  .body(StringBody(requestBody)))
+            }
         }
     }
 
   setUp(
     performanceTest.inject(
       atOnceUsers(1),
-      nothingFor(10 seconds),
+      nothingFor(2 seconds),
       atOnceUsers(numberOfParticipants * topics.records.size)
     )
   ).protocols(http)
@@ -136,8 +156,7 @@ class PerformanceTest extends Simulation {
       }
       first = false
 
-      val user = if (userId.isEmpty) "USR" + session.userId else userId
-      gen.writeRaw("{\"key\": " + new MeasurementKey(user, "SOURCE") + ", \"value\": " + toJson(record) + "}")
+      gen.writeRaw("{\"key\": " + new MeasurementKey(session("user").as[String], "SOURCE") + ", \"value\": " + toJson(record) + "}")
     }
     gen.writeEndArray()
     gen.writeEndObject()
@@ -156,4 +175,8 @@ class PerformanceTest extends Simulation {
   }
 
   private def schema(c: Class[_]): Schema = c.getDeclaredMethod("getClassSchema").invoke(null).asInstanceOf[Schema]
+
+  private def initialDelay(session: Session): Duration = session("phase").as[Double] * interval(session)
+
+  private def interval(session: Session): Duration = session("interval").as[String].toInt seconds
 }
