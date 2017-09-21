@@ -45,7 +45,7 @@ class PerformanceTest extends Simulation {
   private val restProxyUrl = conf.getString("restProxy")
   private val numberOfParticipants = conf.getInt("numberOfParticipants")
   private val duration = conf.getDuration("duration", TimeUnit.SECONDS) seconds
-
+  private val kafkaApiVersion = conf.getInt("kafkaApiVersion")
   private var keySchemaId = 0
   private val schemaIds = new ConcurrentHashMap[String, Int]()
 
@@ -97,14 +97,14 @@ class PerformanceTest extends Simulation {
           pause(initialDelay(_))
             .exec(http("Performance Test")
               .post(restProxyUrl + "/topics/${topic}")
-              .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
+              .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
               .header("X-User-ID", _ ("user").as[String])
               .body(StringBody(requestBody)))
             .repeat(session => ((duration - initialDelay(session)) / interval(session)).toInt) {
               pause(interval(_))
                 .exec(http("Performance Test")
                   .post(restProxyUrl + "/topics/${topic}")
-                  .header("Content-Type", "application/vnd.kafka.avro.v2+json; charset=utf-8")
+                  .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
                   .header("X-User-ID", _ ("user").as[String])
                   .body(StringBody(requestBody)))
             }
