@@ -67,10 +67,8 @@ class PerformanceTest extends Simulation {
 
   private val performanceTest: ScenarioBuilder = scenario("PerformanceTest")
     .doIfOrElse(_ => schemasRegistered.compareAndSet(false, true)) {
-      exec(http("RegisterKeySchema")
-        .post(schemaRegistryUrl + "/subjects/key/versions")
-        .header("Content-Type", "application/vnd.schemaregistry.v1+json")
-        .body(StringBody(schemaWrapper(classOf[MeasurementKey])))
+      exec(http("GetKeySchemaId")
+        .get(schemaRegistryUrl + "/subjects/key/versions/1")
         .check(jsonPath("$..id").ofType[Int].saveAs("key")))
         .exec(session => {
           keySchemaId = session("key").as[Int]
@@ -78,22 +76,24 @@ class PerformanceTest extends Simulation {
         })
         .repeat(topics.records.size) {
           feed(topics.queue)
-            .exec(http("RegisterValueSchemas")
-              .post(schemaRegistryUrl + "/subjects/${topic}-value/versions")
-              .header("Content-Type", "application/vnd.schemaregistry.v1+json")
-              .body(StringBody(valueSchema))
-              .check(jsonPath("$..id").ofType[Int].saveAs("schemaId"))
-            )
-            .exec(session => {
-              schemaIds.put(session("topic").as[String], session("schemaId").as[Int])
-              session
-            })
+            .exec(http("GetTopics")
+              .get(restProxyUrl + "/topics")
+              .check(jsonPath("$[?(@=='${topic}')]").count.transform(_ > 0).saveAs("verify_topic")))
+            .doIf(_ ("verify_topic").as[Boolean]) {
+              exec(http("GetValueSchemaId")
+                .get(schemaRegistryUrl + "/subjects/${topic}-value/versions/1")
+                .check(jsonPath("$..id").ofType[Int].saveAs("schemaId"))
+              ).exec(session => {
+                schemaIds.put(session("topic").as[String], session("schemaId").as[Int])
+                session
+              })
+            }
         }
     } {
       feed(userIdFeeder)
         .feed(phaseFeeder)
         .feed(topics.random)
-        .doIf(initialDelay(_) < duration) {
+        .doIf(session => schemaIds.containsKey(session("topic").as[String]) && initialDelay(session) < duration) {
           pause(initialDelay(_))
             .exec(http("Performance Test")
               .post(restProxyUrl + "/topics/${topic}")
@@ -118,21 +118,6 @@ class PerformanceTest extends Simulation {
       atOnceUsers(numberOfParticipants * topics.records.size)
     )
   ).protocols(http)
-
-  private def valueSchema(session: Session): String = {
-    val valueClass = Class.forName(session("valueClass").as[String])
-    schemaWrapper(valueClass)
-  }
-
-  private def schemaWrapper(valueClass: Class[_]): String = {
-    val writer = new StringWriter()
-    val gen = new JsonFactory().createGenerator(writer)
-    gen.writeStartObject()
-    gen.writeStringField("schema", schema(valueClass).toString)
-    gen.writeEndObject()
-    gen.flush()
-    writer.toString
-  }
 
   private def requestBody(session: Session): String = {
     val valueClass = Class.forName(session("valueClass").as[String])
