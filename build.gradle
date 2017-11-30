@@ -37,3 +37,7 @@ idea {
         scopes.TEST.plus += [project.configurations.gatlingRuntime]
     }
 }
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.3.1'
+    distributionType 'all'
+}
