@@ -1,25 +1,29 @@
 plugins {
     id "com.github.lkishalmi.gatling" version "0.4.1"
     id "idea"
+    id "scala"
 }
+apply plugin: 'scala'
 
-group 'org.radarcnd'
+group 'org.radarcns'
 version '1.0-SNAPSHOT'
 
 sourceCompatibility = 1.8
 
 repositories {
     jcenter()
-
+    mavenCentral()
+    maven { url  'http://dl.bintray.com/radar-cns/org.radarcns' }
     flatDir { dirs 'libs' }
 }
 
 ext.avroVersion = '1.8.2'
-
+ext.schemasVersion = '0.2.2'
 
 dependencies {
+    gatling 'org.scala-lang:scala-library:2.11.8'
     gatling group: 'org.apache.avro', name: 'avro-tools', version: avroVersion
-    gatling name: 'schemas-1.0'
+    gatling group: 'org.radarcns', name: 'radar-schemas-commons', version: schemasVersion
 }
 
 gatling {
@@ -37,6 +41,7 @@ idea {
         scopes.TEST.plus += [project.configurations.gatlingRuntime]
     }
 }
+
 task wrapper(type: Wrapper) {
     gradleVersion = '4.3.1'
     distributionType 'all'

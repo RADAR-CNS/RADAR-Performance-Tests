@@ -30,14 +30,15 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumWriter}
 import org.apache.avro.io.EncoderFactory
 import org.apache.trevni.avro.RandomData
-import org.radarcns.key.MeasurementKey
+import org.radarcns.kafka.ObservationKey
+//import org.radarcns.key.MeasurementKey
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Random
 
 
-class PerformanceTest extends Simulation {
+class PerformanceTest  {
   private val encoderFactory = new EncoderFactory()
   private val random = new Random()
   private val conf = ConfigFactory.parseResources("test.conf")
@@ -67,14 +68,14 @@ class PerformanceTest extends Simulation {
 
   private val performanceTest: ScenarioBuilder = scenario("PerformanceTest")
     .doIfOrElse(_ => schemasRegistered.compareAndSet(false, true)) {
-      exec(http("GetKeySchemaId")
-        .get(schemaRegistryUrl + "/subjects/key/versions/1")
-        .check(jsonPath("$..id").ofType[Int].saveAs("key")))
-        .exec(session => {
-          keySchemaId = session("key").as[Int]
-          session
-        })
-        .repeat(topics.records.size) {
+//      exec(http("GetKeySchemaId")
+//        .get(schemaRegistryUrl + "/subjects/key/versions/1")
+//        .check(jsonPath("$..id").ofType[Int].saveAs("key")))
+//        .exec(session => {
+//          keySchemaId = session("key").as[Int]
+//          session
+//        })
+        repeat(topics.records.size) {
           feed(topics.queue)
             .exec(http("GetTopics")
               .get(restProxyUrl + "/topics")
@@ -111,13 +112,13 @@ class PerformanceTest extends Simulation {
         }
     }
 
-  setUp(
-    performanceTest.inject(
-      atOnceUsers(1),
-      nothingFor(2 seconds),
-      atOnceUsers(numberOfParticipants * topics.records.size)
-    )
-  ).protocols(http)
+//  setUp(
+//    performanceTest.inject(
+//      atOnceUsers(1),
+//      nothingFor(2 seconds),
+//      atOnceUsers(numberOfParticipants * topics.records.size)
+//    )
+//  ).protocols(http)
 
   private def requestBody(session: Session): String = {
     val valueClass = Class.forName(session("valueClass").as[String])
@@ -141,7 +142,7 @@ class PerformanceTest extends Simulation {
       }
       first = false
 
-      gen.writeRaw("{\"key\": " + new MeasurementKey(session("user").as[String], "SOURCE") + ", \"value\": " + toJson(record) + "}")
+      gen.writeRaw("{\"key\": " + new ObservationKey(null,session("user").as[String], "SOURCE") + ", \"value\": " + toJson(record) + "}")
     }
     gen.writeEndArray()
     gen.writeEndObject()
