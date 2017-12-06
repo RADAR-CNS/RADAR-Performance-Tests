@@ -70,8 +70,6 @@ class RadarPlatformTest extends Simulation {
 
   val authorization_header_for_client = "Basic " + Base64.getEncoder.encodeToString(clientIdToPair.concat(":").concat(clientIdToPairSecret).getBytes(StandardCharsets.UTF_8))
 
-  //  val authorization_header = "Basic " + Base64.getEncoder.encodeToString("ManagementPortalapp:travel.COUNTRY.flowers".getBytes(StandardCharsets.UTF_8))
-
   val headers_http_authentication = Map(
     "Content-Type" -> """application/x-www-form-urlencoded""",
     "Accept" -> """application/json""",
@@ -145,28 +143,17 @@ class RadarPlatformTest extends Simulation {
               keySchemaIds.put(session("topic").as[String], session("keySchemaId").as[Int])
               session
             })
-            //          .pause(1)
             .exec(http("GetValueSchemaId")
             .get("/schema/subjects/${topic}-value/versions/1")
             .check(jsonPath("$..id").ofType[Int].saveAs("valueSchemaId"))
           )
             .exec(session => {
               valueSchemaIds.put(session("topic").as[String], session("valueSchemaId").as[Int])
-              //              println("value topic " , valueSchemaIds.get(session("topic").as[String]))
               session
             })
         }
-////      pause(1)
           .feed(phaseFeeder)
-//          .feed(topics.random)
-
           .doIf( session => keySchemaIds.containsKey(session("topic").as[String]) && initialDelay(session) < duration) {
-//              pause(initialDelay(_))
-//            .exec(http("Send Data ")
-//              .post( "/kafka/topics/${topic}")
-//              .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
-//              .headers(headers_http_authenticated_for_subject)
-//              .body(StringBody(requestBody)))
             pause(initialDelay(_))
               .foreach(topics.records , "topic") {
                 exec(flattenMapIntoAttributes("${topic}"))
