@@ -16,7 +16,6 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumWriter}
 import org.apache.avro.io.EncoderFactory
 import org.apache.trevni.avro.RandomData
-import org.radarcns.kafka.ObservationKey
 
 import scala.util.Random
 import scala.collection.JavaConverters._
@@ -132,18 +131,16 @@ class RadarPlatformTest extends Simulation {
       .queryParam("refresh_token", "${refreshTokenForSubject}")
       .headers(headers_http_authentication_for_client)
       .check(jsonPath("$.access_token").saveAs("access_token_for_subject"))).exitHereIfFailed
-//      .doIfOrElse(_ => schemasRegistered.compareAndSet(false, true)) {
-          .repeat(topics.records.size/2) {
-          feed(topics.queue)
-            .exec(http("Check topic exists")
+            .foreach(topics.records , "topic") {
+              exec(flattenMapIntoAttributes("${topic}"))
+                .exec(http("Check topic exists")
               .get("/kafka/topics/${topic}")
               .headers(headers_http_authenticated)
               .check(status.is(200))).exitHereIfFailed
-            //          .pause(1)
+                      .pause(1)
             .exec(http("GetKeySchemaId")
             .get("/schema/subjects/${topic}-key/versions/1")
-            .check(jsonPath("$..id").ofType[Int].saveAs("keySchemaId"))
-          )
+            .check(jsonPath("$..id").ofType[Int].saveAs("keySchemaId")))
             .exec(session => {
               keySchemaIds.put(session("topic").as[String], session("keySchemaId").as[Int])
               session
@@ -159,29 +156,32 @@ class RadarPlatformTest extends Simulation {
               session
             })
         }
-//    } {
-//      pause(1)
+////      pause(1)
           .feed(phaseFeeder)
-          .feed(topics.random)
-          .doIf( session => keySchemaIds.containsKey(session("topic").as[String]) && canContinue(session)) {
-              pause(initialDelay(_))
-            .exec(http("Send Data ")
-              .post( "/kafka/topics/${topic}")
-              .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
-              .headers(headers_http_authenticated_for_subject)
-              .body(StringBody(requestBody)))
-            .repeat(session => ((duration - initialDelay(session)) / interval(session)).toInt) {
-              pause(interval(_))
-                .exec(http("Send Data ")
-                  .post( "/kafka/topics/${topic}")
-                  .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
-                  .headers(headers_http_authenticated_for_subject)
-                  .body(StringBody(requestBody)))
+//          .feed(topics.random)
+
+          .doIf( session => keySchemaIds.containsKey(session("topic").as[String]) && initialDelay(session) < duration) {
+//              pause(initialDelay(_))
+//            .exec(http("Send Data ")
+//              .post( "/kafka/topics/${topic}")
+//              .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
+//              .headers(headers_http_authenticated_for_subject)
+//              .body(StringBody(requestBody)))
+            pause(initialDelay(_))
+              .foreach(topics.records , "topic") {
+                exec(flattenMapIntoAttributes("${topic}"))
+                .repeat(session => ((duration - initialDelay(session)) / interval(session)).toInt) {
+                pause(interval(_))
+                  .exec(http("Send Data ")
+                    .post("/kafka/topics/${topic}")
+                    .header("Content-Type", s"application/vnd.kafka.avro.v${kafkaApiVersion}+json; charset=utf-8")
+                    .headers(headers_http_authenticated_for_subject)
+                    .body(StringBody(requestBody)))
+              }
             }
         }
-//    }
   setUp(
-    backendCheck.inject(atOnceUsers(2))
+    backendCheck.inject(atOnceUsers(5))
   ).protocols(httpConf)
 
 
@@ -224,11 +224,7 @@ class RadarPlatformTest extends Simulation {
 
   private def schema(c: Class[_]): Schema = c.getDeclaredMethod("getClassSchema").invoke(null).asInstanceOf[Schema]
 
-  private def initialDelay(session: Session): Duration = {
-    val phase = session("phase").as[Double]
-    val inter = interval(session)
-   phase * inter
-  }
+  private def initialDelay(session: Session): Duration = session("phase").as[Double] * interval(session)
 
   private def interval(session: Session): Duration = session("interval").as[String].toInt seconds
 
@@ -239,10 +235,5 @@ class RadarPlatformTest extends Simulation {
     writer.write(record, encoder)
     encoder.flush()
     new String(out.toByteArray, "UTF-8")
-  }
-
-  private def canContinue(session: Session): Boolean = {
-   val init =  initialDelay(session);
-    init < duration
   }
 }

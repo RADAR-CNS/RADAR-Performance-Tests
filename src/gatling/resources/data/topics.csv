@@ -1,3 +1,4 @@
 topic,valueClass,recordCount,interval
 android_phone_acceleration,org.radarcns.passive.phone.PhoneAcceleration,1,10
-android_phone_battery_level,org.radarcns.passive.phone.PhoneBatteryLevel,1,10
+android_phone_relative_location,org.radarcns.passive.phone.PhoneRelativeLocation,1,300
+android_phone_step_count,org.radarcns.passive.phone.PhoneStepCount,1,10
