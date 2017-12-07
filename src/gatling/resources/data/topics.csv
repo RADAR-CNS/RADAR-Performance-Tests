@@ -1,4 +1,13 @@
 topic,valueClass,recordCount,interval
+android_phone_battery_level,org.radarcns.passive.phone.PhoneBatteryLevel,1,10
 android_phone_acceleration,org.radarcns.passive.phone.PhoneAcceleration,1,10
-android_phone_relative_location,org.radarcns.passive.phone.PhoneRelativeLocation,1,300
-android_phone_step_count,org.radarcns.passive.phone.PhoneStepCount,1,10
+android_phone_light,org.radarcns.passive.phone.PhoneLight,1,12
+android_phone_relative_location,org.radarcns.passive.phone.PhoneRelativeLocation,1,60
+android_phone_call,org.radarcns.passive.phone.PhoneCall,1,60
+android_phone_sms,org.radarcns.passive.phone.PhoneSms,1,60
+android_phone_sms_unread,org.radarcns.passive.phone.PhoneSmsUnread,1,60
+android_phone_step_count,org.radarcns.passive.phone.PhoneStepCount,1,12
+android_phone_gyroscope,org.radarcns.passive.phone.PhoneGyroscope,1,12
+android_phone_magnetic_field,org.radarcns.passive.phone.PhoneMagneticField,1,12
+android_phone_user_interaction,org.radarcns.passive.phone.PhoneUserInteraction,1,30
+android_phone_usage_event,org.radarcns.passive.phone.PhoneUsageEvent,1,60

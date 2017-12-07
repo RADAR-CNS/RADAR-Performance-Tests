@@ -32,18 +32,19 @@ class RadarPlatformTest extends Simulation {
   private val clientSecret = conf.getString("clientSecret")
   private val clientScopes = conf.getString("scopes")
   private val clientIdToPair = conf.getString("clientIdToPair")
-  private val subjectLogin = conf.getString("subjectLogin")
   private val kafkaApiVersion = conf.getInt("kafkaApiVersion")
   private val projectName = conf.getString("projectName")
-  private val sourceId = conf.getString("sourceId")
   private val clientIdToPairSecret = conf.getString("clientIdToPairSecret")
+  private val numberOfParticipants = conf.getInt("numberOfParticipants")
+  private val sourceTypeProducer = conf.getString("sourceTypeProducer")
+  private val sourceTypeModel = conf.getString("sourceTypeModel")
+  private val sourceTypeCatalogVersion = conf.getString("sourceTypeCatalogVersion")
   private val keySchemaIds = new ConcurrentHashMap[String, Int]()
   private val valueSchemaIds = new ConcurrentHashMap[String, Int]()
   private val encoderFactory = new EncoderFactory()
   private val random = new Random()
   private val topics = csv("topics.csv")
-  private val duration = conf.getDuration("duration", TimeUnit.SECONDS) seconds
-  private val schemasRegistered = new AtomicBoolean()
+  private val duration = conf.getDuration("durationPerTopic", TimeUnit.SECONDS) seconds
 
   val phaseFeeder = new Feeder[Double] {
     override def hasNext = true
@@ -51,6 +52,12 @@ class RadarPlatformTest extends Simulation {
     override def next: Map[String, Double] = {
       Map("phase" -> random.nextDouble())
     }
+  }
+
+  val externalIdFeeder = new Feeder[String] {
+    override def hasNext = true
+
+    override def next: Map[String, String] = Map("externalId" -> random.nextInt(numberOfParticipants).toString)
   }
 
   private var refreshToken = ""
@@ -117,21 +124,47 @@ class RadarPlatformTest extends Simulation {
       .headers(headers_http_authenticated)
       .check(status.is(200)))
     .pause(1)
-    .exec(http("PairApp")
-      .get("/managementportal/api/oauth-clients/pair")
-      .queryParam("clientId", clientIdToPair)
-      .queryParam("login", subjectLogin)
+    .exec(http("Get project details by project-name: " + projectName)
+      .get("/managementportal/api/projects/"+projectName)
       .headers(headers_http_authenticated)
       .check(status.is(200))
-      .check(jsonPath("$.refreshToken").ofType[String].saveAs("refreshTokenForSubject"))
-    )
+      .check(jsonPath("$").ofType[String].saveAs("projectDTO")))
+
+      .feed(externalIdFeeder)
+      .exec(http("Create new subject")
+        .post("/managementportal/api/subjects")
+        .headers(headers_http_authenticated)
+        .body(StringBody(subjectReqBody)).asJSON
+        .check(status.is(201))
+        .check(jsonPath("$.login").ofType[String].saveAs("login"))).exitHereIfFailed
+        .exec(http("PairApp")
+          .get("/managementportal/api/oauth-clients/pair")
+          .queryParam("clientId", clientIdToPair)
+          .queryParam("login", "${login}")
+          .headers(headers_http_authenticated)
+          .check(status.is(200))
+          .check(jsonPath("$.refreshToken").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
        .pause(1)
-    .exec(http("Get Token for App")
+      .exec(http("Request Token for App")
+        .post("/managementportal/oauth/token")
+        .queryParam("grant_type", "refresh_token")
+        .queryParam("refresh_token", "${refreshTokenForSubject}")
+        .headers(headers_http_authentication_for_client)
+        .check(jsonPath("$.access_token").saveAs("access_token_for_subject"))
+        .check(jsonPath("$.refresh_token").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
+      .exec(http("Pair dynamic source")
+        .post("/managementportal/api/subjects/${login}/sources")
+        .body(StringBody(sourceReqBody)).asJSON
+        .headers(headers_http_authenticated)
+        .check(status.is(201))
+        .check(jsonPath("$.sourceId").ofType[String].saveAs("sourceId")))
+    .exec(http("Renew Token for App")
       .post("/managementportal/oauth/token")
       .queryParam("grant_type", "refresh_token")
       .queryParam("refresh_token", "${refreshTokenForSubject}")
       .headers(headers_http_authentication_for_client)
-      .check(jsonPath("$.access_token").saveAs("access_token_for_subject"))).exitHereIfFailed
+      .check(jsonPath("$.access_token").saveAs("access_token_for_subject"))
+      .check(jsonPath("$.refresh_token").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
             .foreach(topics.records , "topic") {
               exec(flattenMapIntoAttributes("${topic}"))
                 .exec(http("Check topic exists")
@@ -171,8 +204,37 @@ class RadarPlatformTest extends Simulation {
             }
         }
   setUp(
-    backendCheck.inject(atOnceUsers(50))
+    backendCheck.inject(atOnceUsers(10))
   ).protocols(httpConf)
+
+
+  private def subjectReqBody(session: Session): String = {
+    val writer = new StringWriter()
+    val gen = new JsonFactory().createGenerator(writer)
+    gen.writeStartObject()
+    gen.writeRaw("\"project\" : "+ session("projectDTO").as[String] +",")
+//    gen.writeStringField("externalId", session("externalId").as[String])
+    gen.writeStringField("externalId", null)
+    gen.writeStringField("id", null)
+    gen.writeStringField("login", null)
+    gen.writeEndObject()
+    gen.flush()
+    val test = writer.toString
+    test
+  }
+
+  private def sourceReqBody(session: Session): String = {
+    val writer = new StringWriter()
+    val gen = new JsonFactory().createGenerator(writer)
+    gen.writeStartObject()
+    gen.writeStringField("sourceTypeCatalogVersion", sourceTypeCatalogVersion)
+    gen.writeStringField("sourceTypeModel", sourceTypeModel )
+    gen.writeStringField("sourceTypeProducer", sourceTypeProducer)
+    gen.writeEndObject()
+    gen.flush()
+    val test = writer.toString
+    test
+  }
 
 
   private def requestBody(session: Session): String = {
@@ -199,8 +261,8 @@ class RadarPlatformTest extends Simulation {
 
       gen.writeRaw("{ \"key\": {"
         +"\"projectId\": {\"string\":\""+projectName+"\"},"
-        +"\"userId\": \""+subjectLogin+"\","
-        +"\"sourceId\": \""+sourceId+"\""
+        +"\"userId\": \""+session("login").as[String]+"\","
+        +"\"sourceId\": \""+session("sourceId").as[String]+"\""
         +"}"
         +", \"value\": " + toJson(record) +  "}")
     }
