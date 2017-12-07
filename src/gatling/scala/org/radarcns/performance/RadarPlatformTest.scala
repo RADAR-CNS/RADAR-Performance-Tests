@@ -6,12 +6,14 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
+import io.gatling.commons.stats.Status
 import com.fasterxml.jackson.core.JsonFactory
 import com.typesafe.config.ConfigFactory
 import io.gatling.core.scenario.Simulation
 import io.gatling.core.Predef._
 import io.gatling.core.body.StringBody
 import io.gatling.http.Predef._
+import io.gatling.http.request.ExtraInfo
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumWriter}
 import org.apache.avro.io.EncoderFactory
@@ -61,6 +63,7 @@ class RadarPlatformTest extends Simulation {
     .acceptLanguageHeader("fr,fr-fr;q=0.8,en-us;q=0.5,en;q=0.3")
     .connectionHeader("keep-alive")
     .userAgentHeader("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:33.0) Gecko/20100101 Firefox/33.0")
+    .extraInfoExtractor { extraInfo => List(getExtraInfo(extraInfo))}
 
   val headers_http = Map(
     "Accept" -> """application/json"""
@@ -168,7 +171,7 @@ class RadarPlatformTest extends Simulation {
             }
         }
   setUp(
-    backendCheck.inject(atOnceUsers(5))
+    backendCheck.inject(atOnceUsers(50))
   ).protocols(httpConf)
 
 
@@ -222,5 +225,20 @@ class RadarPlatformTest extends Simulation {
     writer.write(record, encoder)
     encoder.flush()
     new String(out.toByteArray, "UTF-8")
+  }
+
+  /**
+    * Adds extra information to the similation.log on failures
+    * This will be avoided by the report
+    *
+    * @param extraInfo
+    * @return
+    */
+  private def getExtraInfo(extraInfo: ExtraInfo): String = {
+    if (extraInfo.status.eq(Status.apply("KO"))) {
+      " Request: " + extraInfo.request.getStringData+ " Response: " + extraInfo.response.body.string
+    } else {
+      ""
+    }
   }
 }
