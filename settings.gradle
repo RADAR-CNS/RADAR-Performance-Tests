@@ -1,2 +1,15 @@
-rootProject.name = 'performance-tests'
+pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'org.anarres.jarjar') {
+                useModule('org.anarres.jarjar:jarjar-gradle:1.0.1')
+            }
+        }
+    }
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 
+rootProject.name = 'performance-tests'

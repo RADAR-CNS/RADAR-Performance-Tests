@@ -1,6 +1,9 @@
 plugins {
-    id "com.github.lkishalmi.gatling" version "0.4.1"
+    id "com.github.lkishalmi.gatling" version "3.0.2"
+    id "org.anarres.jarjar" version "1.0.1"
+
     id "idea"
+    id 'java'
     id "scala"
 }
 apply plugin: 'scala'
@@ -8,41 +11,42 @@ apply plugin: 'scala'
 group 'org.radarcns'
 version '1.0-SNAPSHOT'
 
-sourceCompatibility = 1.8
+sourceCompatibility = JavaVersion.VERSION_11
 
 repositories {
     jcenter()
-    mavenCentral()
-    maven { url  'http://dl.bintray.com/radar-cns/org.radarcns' }
-    flatDir { dirs 'libs' }
 }
 
 ext.avroVersion = '1.8.2'
-ext.schemasVersion = '0.2.2'
+ext.schemasVersion = '0.5.0'
 
 dependencies {
-    gatling 'org.scala-lang:scala-library:2.11.8'
-    gatling group: 'org.apache.avro', name: 'avro-tools', version: avroVersion
-    gatling group: 'org.radarcns', name: 'radar-schemas-commons', version: schemasVersion
+    compile group: 'org.apache.avro', name: 'avro', version: '1.8.2'
+    gatling 'org.scala-lang:scala-library:2.12.3'
+    gatling group: 'org.apache.avro', name: 'trevni-avro', version: '1.9.0'
+    gatling(group: 'org.radarcns', name: 'radar-schemas-commons', version: schemasVersion)
 }
 
 gatling {
-    simulations = {
-        include "**/org/radarcns/performance/*.scala"
-    }
+}
+
+task unzipAvroJar(type: Copy) {
+    from zipTree('avro-tools-1.9.2commons-collections-3.2.jar')
+    into ("$buildDir/libs/avro-tools")
+    include "**/*.class"
+    exclude "**/org/slf4j/impl/StaticLoggerBinder.class"
 }
 
 idea {
     module {
         downloadSources = true
 
-        testSourceDirs += project.file('src/gatling/scala')
+        testSourceDirs += project.file('src/gatling/simulations')
         scopes.TEST.plus += [project.configurations.gatlingCompile]
         scopes.TEST.plus += [project.configurations.gatlingRuntime]
     }
 }
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '4.3.1'
-    distributionType 'all'
+wrapper {
+    gradleVersion = '5.4.1'
 }

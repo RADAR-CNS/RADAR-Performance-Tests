@@ -5,10 +5,9 @@ import io.gatling.core.config.GatlingPropertiesBuilder
 
 object SimilationRunner {
   def main(args: Array[String]) {
-    val simClass = classOf[RadarPlatformTest].getName
+    val simClass = classOf[RadarPlatformSimulation].getName
     val props = new GatlingPropertiesBuilder
-    props.sourcesDirectory("./src/gatling/scala")
-//    props.binariesDirectory("./build/classes")
+    props.simulationsDirectory("./src/gatling/simulations")
     props.simulationClass(simClass)
     Gatling.fromMap(props.build)
   }
