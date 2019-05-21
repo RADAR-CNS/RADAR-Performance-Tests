@@ -18,6 +18,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumWriter}
 import org.apache.avro.io.EncoderFactory
 import org.apache.trevni.avro.RandomData
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration.{Duration, _}
 import scala.language.postfixOps
 
@@ -244,7 +245,7 @@ class RadarPlatformSimulation extends Simulation {
     gen.writeNumberField("value_schema_id", valueSchemaIds.get(session("topic").as[String]))
     gen.writeArrayFieldStart("records")
     var first = true
-    for (record <- records.asInstanceOf[Iterable[GenericData.Record]]) {
+    for (record <- records.asScala.asInstanceOf[Iterable[GenericData.Record]]) {
       val now = System.currentTimeMillis() / 1000.0
       record.put("time", now)
       record.put("timeReceived", now)
