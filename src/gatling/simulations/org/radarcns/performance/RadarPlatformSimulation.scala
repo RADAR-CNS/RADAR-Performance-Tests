@@ -139,13 +139,19 @@ class RadarPlatformSimulation extends Simulation {
           .queryParam("login", "${login}")
           .headers(headers_http_authenticated)
           .check(status.is(200))
-          .check(jsonPath("$.refreshToken").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
+          .check(jsonPath("$.tokenUrl").ofType[String].saveAs("metaTokenForSubject"))).exitHereIfFailed
+          .exec(http("RefreshToken")
+            .get("${metaTokenForSubject}")
+            .headers(headers_http_authentication_for_client)
+            .check(status.is(200))
+            .check(jsonPath("$.refreshToken").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
        .pause(1)
       .exec(http("Request Token for App")
         .post("/managementportal/oauth/token")
         .queryParam("grant_type", "refresh_token")
         .queryParam("refresh_token", "${refreshTokenForSubject}")
         .headers(headers_http_authentication_for_client)
+        .check(status.is(200))
         .check(jsonPath("$.access_token").saveAs("access_token_for_subject"))
         .check(jsonPath("$.refresh_token").ofType[String].saveAs("refreshTokenForSubject"))).exitHereIfFailed
       .exec(http("Pair dynamic source")
