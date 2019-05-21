@@ -127,6 +127,8 @@ class RadarPlatformSimulation extends Simulation {
       .check(status.is(200))
       .check(jsonPath("$").ofType[String].saveAs("projectDTO")))
       .feed(externalIdFeeder)
+      .feed(phaseFeeder)
+      .pause(initialDelay(_))
       .exec(http("Create new subject")
         .post("/managementportal/api/subjects")
         .headers(headers_http_authenticated)
@@ -190,10 +192,8 @@ class RadarPlatformSimulation extends Simulation {
               session
             })
         }
-          .feed(phaseFeeder)
           .doIf( session => keySchemaIds.containsKey(session("topic").as[String]) && initialDelay(session) < duration) {
-            pause(initialDelay(_))
-              .foreach(topics.readRecords, "topic") {
+              foreach(topics.readRecords, "topic") {
                 exec(flattenMapIntoAttributes("${topic}"))
                 .repeat(session => ((duration - initialDelay(session)) / interval(session)).toInt) {
                 pause(interval(_))
@@ -277,7 +277,7 @@ class RadarPlatformSimulation extends Simulation {
 
   private def schema(c: Class[_]): Schema = c.getDeclaredMethod("getClassSchema").invoke(null).asInstanceOf[Schema]
 
-  private def initialDelay(session: Session): Duration = session("phase").as[Double] * interval(session)
+  private def initialDelay(session: Session): Duration = (session("phase").as[Double] seconds) * numberOfParticipants
 
   private def interval(session: Session): Duration = session("interval").as[String].toInt seconds
 
